@@ -1,0 +1,239 @@
+#!/usr/bin/env python
+
+# Author: Panayotis Katsaloulis
+# email:  panayotis@panayotis.com
+# 
+# Frontend of DOSBox emulator, written in python and pygtk
+
+# Copyright (C) 2003 Panayotis Katsaloulis
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# or check http://www.gnu.org
+
+
+import gtk,gobject,os
+
+class Base:
+	def __init__(self):
+
+		self.opt_fullscreen = ""
+		self.opt_exit = ""
+		self.gamelist = []
+		self.dosboxpath = "/usr/bin/dosbox"
+		#Create main window
+		self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+		
+		# Create executable chooser
+		self.exec_hbox = gtk.HBox()
+		self.browse = gtk.Button("Browse")
+		self.executable = gtk.Entry(0)
+		self.execlabel = gtk.Label("Executable")
+		self.exec_hbox.pack_start(self.execlabel, gtk.FALSE, gtk.FALSE)
+		self.exec_hbox.pack_start(self.executable, gtk.TRUE, gtk.TRUE)
+		self.exec_hbox.pack_start(self.browse, gtk.FALSE, gtk.FALSE)
+		
+		self.profbox = gtk.HBox()
+		self.store_b = gtk.Button ("Store")
+		self.delete_b = gtk.Button ("Delete")
+		self.profbox.pack_start(self.store_b)
+		self.profbox.pack_start(self.delete_b)
+
+		# Browser creation
+		self.filesel = gtk.FileSelection ("Please provive with the Executable filename")
+
+		# DOSBOX options
+		self.optbox = gtk.VBox()
+		self.fullscreen = gtk.CheckButton ("Full screen mode")
+		self.exitb = gtk.CheckButton ("Exit DOS mode after program fiishes")
+		self.execb = gtk.Button ("Execute Game")
+		self.name_label = gtk.Label ("Name of the game")
+		self.gname = gtk.Entry(0)
+		self.separator = gtk.HSeparator()
+		self.optbox.pack_start(self.name_label, gtk.FALSE, gtk.FALSE)
+		self.optbox.pack_start(self.gname, gtk.FALSE, gtk.FALSE)
+		self.optbox.pack_start(self.separator, gtk.FALSE, gtk.FALSE, 5)
+		self.optbox.pack_start(self.exec_hbox, gtk.FALSE, gtk.FALSE)
+		self.optbox.pack_start(self.fullscreen, gtk.FALSE, gtk.FALSE)
+		self.optbox.pack_start(self.exitb, gtk.FALSE, gtk.FALSE)
+		self.optbox.pack_start(self.execb, gtk.FALSE, gtk.FALSE)
+		self.optbox.pack_start(gtk.Label(" "), gtk.TRUE, gtk.TRUE)
+		self.optbox.pack_end(self.profbox, gtk.FALSE, gtk.FALSE)
+		
+		# Games list
+		self.scr_window = gtk.ScrolledWindow()
+		self.scr_window.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+		self.model = gtk.ListStore(gobject.TYPE_STRING)
+		self.tree = gtk.TreeView(self.model)
+		self.selection = self.tree.get_selection()
+		cell = gtk.CellRendererText()
+		self.tree.show()
+		self.scr_window.add_with_viewport (self.tree)
+		self.scr_window.show()
+		column = gtk.TreeViewColumn("Game Presets", cell, text=0)
+		self.tree.append_column(column)
+		self.scr_window.set_size_request(200, 400)
+		
+
+		# Pack *all* remaining components
+		self.hpane = gtk.HPaned()
+		self.hpane.add1(self.scr_window)
+		self.hpane.add2(self.optbox)
+		self.window.add(self.hpane)
+		self.window.set_size_request(620, 400)
+
+		# Make all objects visible
+		self.exec_hbox.show()
+		self.browse.show()
+		self.executable.show()
+		self.execlabel.show()
+		self.store_b.show()
+		self.delete_b.show()
+		self.name_label.show()
+		self.gname.show()
+		self.separator.show()
+		self.profbox.show()
+		self.optbox.show()
+		self.fullscreen.show()
+		self.exitb.show()
+		self.execb.show()
+		self.hpane.show()
+		self.window.show()
+
+		# Handle GUI events
+		self.window.connect("delete_event", self.delete_event)
+		self.window.connect("destroy", self.destroy)
+		self.execb.connect("clicked", self.exec_game)
+		self.browse.connect("clicked", self.browse_filename)
+		self.store_b.connect("clicked", self.add_profile)
+		self.delete_b.connect("clicked", self.delete_profile)
+		self.fullscreen.connect("toggled", self.full_toggle)
+		self.exitb.connect("toggled", self.dos_toggle)
+		self.filesel.ok_button.connect("clicked", self.browse_ok)
+		self.filesel.cancel_button.connect("clicked", self.browse_cancel, "cancel")
+		self.filesel.connect("delete_event", self.browse_ignore)
+		self.selection.connect("changed", self.profile_select)
+	
+		self.restore_profiles()
+
+		gtk.main()
+
+		
+	def delete_event(self, widget, event, data=None):
+		return gtk.FALSE
+		
+	def destroy(self, widget, data=None):
+		self.store_profiles()
+		gtk.main_quit()
+
+	def exec_game(self, widget, data=None):
+		cmd=["dosbox"]
+		if ( self.opt_fullscreen != "" ):
+			cmd.append(self.opt_fullscreen)
+		if ( self.executable.get_text() != "" ):
+			cmd.append(self.executable.get_text())
+		if ( self.opt_exit != "" ):
+			cmd.append(self.opt_exit)
+		print "Execute", self.dosboxpath, "with arguments", cmd
+		self.pid=os.spawnv( os.P_NOWAIT, self.dosboxpath, cmd)
+	
+	def full_toggle(self, widget, data=None):
+		self.opt_fullscreen = ("", "-fullscreen")[widget.get_active()]
+	
+	def dos_toggle(self, widget, data=None):
+		self.opt_exit = ("", "-exit")[widget.get_active()]
+
+
+	def browse_filename(self, widget, data=None):
+		self.filesel.show()
+
+	def browse_ok(self, widget, data=None):
+		self.executable.set_text(self.filesel.get_filename())
+		self.filesel.hide()
+
+	def browse_cancel(self, widget, data=None):
+		self.filesel.hide()
+
+	def browse_ignore (self, widget, data=None):
+		self.filesel.hide()
+		return gtk.TRUE
+	
+	def add_profile (self, widget, data=None):
+		self.add_to_list( self.gname.get_text(), self.executable.get_text(), self.fullscreen.get_active(), self.exitb.get_active())
+
+	def delete_profile (self, widget, data=None):
+		iterat = self.selection.get_selected()
+		path = self.model.get_path(iterat[1])
+		if ( path[0] > 0 ):
+			self.model.remove(iterat[1])
+			self.gamelist.pop(path[0])
+			self.store_profiles()
+
+	def add_to_list ( self, name_s, path_s, full_s, dos_s ):
+		if (name_s == ""):
+			name_s = "Unnamed"
+		self.gamelist.append( (name_s, path_s, full_s, dos_s) )
+		iter = self.model.append()
+		self.model.set(iter, 0, name_s)
+		self.store_profiles()
+	
+	def profile_select (self, widget, data=None):
+		iterat = self.selection.get_selected()
+		path = self.model.get_path(iterat[1])
+		data = self.gamelist[path[0]]
+		self.gname.set_text(data[0])
+		self.executable.set_text(data[1])
+		self.fullscreen.set_active(data[2])
+		self.exitb.set_active(data[3])
+
+	def store_profiles (self):
+		filename = self.get_prefs_filename()
+		outfile = file(filename,'w')
+		outfile.write("self.dosboxpath = \"")
+		outfile.write(self.dosboxpath)
+		outfile.write("\"\nself.profiles = [")
+		lprefix = ""
+		for dat in self.gamelist:
+			outfile.write(lprefix)
+			outfile.write("\n(\"")
+			outfile.write(dat[0])
+			outfile.write("\", \"")
+			outfile.write(dat[1])
+			outfile.write("\", ")
+			outfile.write(("False", "True")[dat[2]])
+			outfile.write(", ")
+			outfile.write(("False", "True")[dat[3]])
+			outfile.write(")")
+			lprefix=", "
+		outfile.write("]\n")
+		outfile.close()
+
+	def restore_profiles (self):
+		filename=self.get_prefs_filename()
+		try:
+			outfile = file(filename,'r')
+			execfile(filename)
+			outfile.close()
+			for dat in self.profiles:
+				self.add_to_list(dat[0], dat[1], dat[2], dat[3])
+		except IOError:
+			print "Filename",filename,"not found. Creating with default parameters."
+			self.add_to_list ('Default', '', False, False)
+			
+	
+	def get_prefs_filename (self):
+		home = os.environ.get('HOME')
+		return home+'/'+'.pydosbox'
+
+prog=Base()
